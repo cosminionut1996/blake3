@@ -4,54 +4,54 @@ package blake3
 
 import "encoding/binary"
 
-func compressNode(n node) (out [16]uint32) {
-	compressNodeGeneric(&out, n)
+func compressNode(n Node) (out [16]uint32) {
+	CompressNodeGeneric(&out, n)
 	return
 }
 
-func compressBuffer(buf *[maxSIMD * chunkSize]byte, buflen int, key *[8]uint32, counter uint64, flags uint32) node {
-	return compressBufferGeneric(buf, buflen, key, counter, flags)
+func compressBuffer(buf *[maxSIMD * chunkSize]byte, buflen int, key *[8]uint32, Counter uint64, Flags uint32) Node {
+	return compressBufferGeneric(buf, buflen, key, Counter, Flags)
 }
 
-func compressChunk(chunk []byte, key *[8]uint32, counter uint64, flags uint32) node {
-	n := node{
-		cv:       *key,
-		counter:  counter,
-		blockLen: blockSize,
-		flags:    flags | flagChunkStart,
+func compressChunk(chunk []byte, key *[8]uint32, Counter uint64, Flags uint32) Node {
+	n := Node{
+		CV:       *key,
+		Counter:  Counter,
+		BlockLen: blockSize,
+		Flags:    Flags | flagChunkStart,
 	}
-	var block [blockSize]byte
+	var Block [blockSize]byte
 	for len(chunk) > blockSize {
-		copy(block[:], chunk)
+		copy(Block[:], chunk)
 		chunk = chunk[blockSize:]
-		bytesToWords(block, &n.block)
-		n.cv = chainingValue(n)
-		n.flags &^= flagChunkStart
+		bytesToWords(Block, &n.Block)
+		n.CV = chainingValue(n)
+		n.Flags &^= flagChunkStart
 	}
-	// pad last block with zeros
-	block = [blockSize]byte{}
-	n.blockLen = uint32(len(chunk))
-	copy(block[:], chunk)
-	bytesToWords(block, &n.block)
-	n.flags |= flagChunkEnd
+	// pad last Block with zeros
+	Block = [blockSize]byte{}
+	n.BlockLen = uint32(len(chunk))
+	copy(Block[:], chunk)
+	bytesToWords(Block, &n.Block)
+	n.Flags |= flagChunkEnd
 	return n
 }
 
 func hashBlock(out *[64]byte, buf []byte) {
-	var block [64]byte
+	var Block [64]byte
 	var words [16]uint32
-	copy(block[:], buf)
-	bytesToWords(block, &words)
-	compressNodeGeneric(&words, node{
-		cv:       iv,
-		block:    words,
-		blockLen: uint32(len(buf)),
-		flags:    flagChunkStart | flagChunkEnd | flagRoot,
+	copy(Block[:], buf)
+	bytesToWords(Block, &words)
+	CompressNodeGeneric(&words, Node{
+		CV:       iv,
+		Block:    words,
+		BlockLen: uint32(len(buf)),
+		Flags:    flagChunkStart | flagChunkEnd | flagRoot,
 	})
 	wordsToBytes(words, out)
 }
 
-func compressBlocks(out *[maxSIMD * blockSize]byte, n node) {
+func compressBlocks(out *[maxSIMD * blockSize]byte, n Node) {
 	var outs [maxSIMD][64]byte
 	compressBlocksGeneric(&outs, n)
 	for i := range outs {
@@ -59,8 +59,8 @@ func compressBlocks(out *[maxSIMD * blockSize]byte, n node) {
 	}
 }
 
-func mergeSubtrees(cvs *[maxSIMD][8]uint32, numCVs uint64, key *[8]uint32, flags uint32) node {
-	return mergeSubtreesGeneric(cvs, numCVs, key, flags)
+func mergeSubtrees(cvs *[maxSIMD][8]uint32, numCVs uint64, key *[8]uint32, Flags uint32) Node {
+	return mergeSubtreesGeneric(cvs, numCVs, key, Flags)
 }
 
 func bytesToWords(bytes [64]byte, words *[16]uint32) {
@@ -69,8 +69,8 @@ func bytesToWords(bytes [64]byte, words *[16]uint32) {
 	}
 }
 
-func wordsToBytes(words [16]uint32, block *[64]byte) {
+func wordsToBytes(words [16]uint32, Block *[64]byte) {
 	for i, w := range words {
-		binary.LittleEndian.PutUint32(block[4*i:], w)
+		binary.LittleEndian.PutUint32(Block[4*i:], w)
 	}
 }

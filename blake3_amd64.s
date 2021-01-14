@@ -56,14 +56,14 @@ DATA shuffle_rot16<>+24(SB)/4, $0x19181b1a
 DATA shuffle_rot16<>+28(SB)/4, $0x1d1c1f1e
 GLOBL shuffle_rot16<>(SB), RODATA|NOPTR, $32
 
-// func compressBlocksAVX512(out *[1024]byte, block *[16]uint32, cv *[8]uint32, counter uint64, blockLen uint32, flags uint32)
+// func compressBlocksAVX512(out *[1024]byte, Block *[16]uint32, CV *[8]uint32, Counter uint64, BlockLen uint32, Flags uint32)
 // Requires: AVX512F
 TEXT ·compressBlocksAVX512(SB), NOSPLIT, $0-40
 	MOVQ out+0(FP), AX
-	MOVQ block+8(FP), CX
-	MOVQ cv+16(FP), DX
+	MOVQ Block+8(FP), CX
+	MOVQ CV+16(FP), DX
 
-	// Initialize block vectors
+	// Initialize Block vectors
 	VPBROADCASTD (CX), Z1
 	VPBROADCASTD 4(CX), Z3
 	VPBROADCASTD 8(CX), Z5
@@ -94,13 +94,13 @@ TEXT ·compressBlocksAVX512(SB), NOSPLIT, $0-40
 	VPBROADCASTD iv<>+4(SB), Z18
 	VPBROADCASTD iv<>+8(SB), Z20
 	VPBROADCASTD iv<>+12(SB), Z22
-	VPBROADCASTD counter+24(FP), Z24
+	VPBROADCASTD Counter+24(FP), Z24
 	VPADDD       seq<>+0(SB), Z24, Z24
 	VPCMPUD      $0x01, seq<>+0(SB), Z24, K1
-	VPBROADCASTD counter+28(FP), Z26
+	VPBROADCASTD Counter+28(FP), Z26
 	VPADDD.BCST  seq<>+4(SB), Z26, K1, Z26
-	VPBROADCASTD blockLen+32(FP), Z28
-	VPBROADCASTD flags+36(FP), Z30
+	VPBROADCASTD BlockLen+32(FP), Z28
+	VPBROADCASTD Flags+36(FP), Z30
 
 	// Round 1
 	VPADDD Z0, Z8, Z0
@@ -953,24 +953,24 @@ TEXT ·compressBlocksAVX512(SB), NOSPLIT, $0-40
 	VPSCATTERDD Z30, K1, 60(AX)(Z1*1)
 	RET
 
-// func compressChunksAVX512(cvs *[16][8]uint32, buf *[16384]byte, key *[8]uint32, counter uint64, flags uint32)
+// func compressChunksAVX512(cvs *[16][8]uint32, buf *[16384]byte, key *[8]uint32, Counter uint64, Flags uint32)
 // Requires: AVX512F
 TEXT ·compressChunksAVX512(SB), NOSPLIT, $192-40
 	MOVQ cvs+0(FP), AX
 	MOVQ buf+8(FP), CX
 	MOVQ key+16(FP), DX
 
-	// Initialize counter
-	VPBROADCASTD counter+24(FP), Z0
+	// Initialize Counter
+	VPBROADCASTD Counter+24(FP), Z0
 	VPADDD       seq<>+0(SB), Z0, Z0
 	VPCMPUD      $0x01, seq<>+0(SB), Z0, K1
-	VPBROADCASTD counter+28(FP), Z2
+	VPBROADCASTD Counter+28(FP), Z2
 	VPADDD.BCST  seq<>+4(SB), Z2, K1, Z2
 	VMOVDQU32    Z0, (SP)
 	VMOVDQU32    Z2, 64(SP)
 
-	// Initialize flags
-	VPBROADCASTD flags+32(FP), Z0
+	// Initialize Flags
+	VPBROADCASTD Flags+32(FP), Z0
 	VMOVDQU32    Z0, 128(SP)
 	ORL          $0x01, 128(SP)
 	ORL          $0x02, 188(SP)
@@ -989,7 +989,7 @@ TEXT ·compressChunksAVX512(SB), NOSPLIT, $192-40
 	XORQ DX, DX
 
 loop:
-	// Load transposed block
+	// Load transposed Block
 	VMOVDQU32  seq<>+0(SB), Z16
 	VPSLLD     $0x0a, Z16, Z16
 	KXNORD     K1, K1, K1
@@ -1871,14 +1871,14 @@ loop:
 	VPSCATTERDD Z14, K1, 28(AX)(Z16*1)
 	RET
 
-// func compressBlocksAVX2(out *[512]byte, block *[16]uint32, cv *[8]uint32, counter uint64, blockLen uint32, flags uint32)
+// func compressBlocksAVX2(out *[512]byte, Block *[16]uint32, CV *[8]uint32, Counter uint64, BlockLen uint32, Flags uint32)
 // Requires: AVX, AVX2
 TEXT ·compressBlocksAVX2(SB), NOSPLIT, $544-40
 	MOVQ out+0(FP), AX
-	MOVQ block+8(FP), CX
-	MOVQ cv+16(FP), DX
+	MOVQ Block+8(FP), CX
+	MOVQ CV+16(FP), DX
 
-	// Load block
+	// Load Block
 	VPBROADCASTD (CX), Y0
 	VMOVDQU      Y0, (SP)
 	VPBROADCASTD 4(CX), Y0
@@ -1925,8 +1925,8 @@ TEXT ·compressBlocksAVX2(SB), NOSPLIT, $544-40
 	VPBROADCASTD iv<>+4(SB), Y9
 	VPBROADCASTD iv<>+8(SB), Y10
 	VPBROADCASTD iv<>+12(SB), Y11
-	VPBROADCASTQ counter+24(FP), Y12
-	VPBROADCASTQ counter+24(FP), Y13
+	VPBROADCASTQ Counter+24(FP), Y12
+	VPBROADCASTQ Counter+24(FP), Y13
 	VPADDQ       seq64<>+0(SB), Y12, Y12
 	VPADDQ       seq64<>+32(SB), Y13, Y13
 	VPUNPCKLDQ   Y13, Y12, Y14
@@ -1935,8 +1935,8 @@ TEXT ·compressBlocksAVX2(SB), NOSPLIT, $544-40
 	VPUNPCKHDQ   Y15, Y14, Y13
 	VPERMQ       $0xd8, Y12, Y12
 	VPERMQ       $0xd8, Y13, Y13
-	VPBROADCASTD blockLen+32(FP), Y14
-	VPBROADCASTD flags+36(FP), Y15
+	VPBROADCASTD BlockLen+32(FP), Y14
+	VPBROADCASTD Flags+36(FP), Y15
 	VMOVDQU      Y8, 512(SP)
 
 	// Round 1
@@ -3125,7 +3125,7 @@ TEXT ·compressBlocksAVX2(SB), NOSPLIT, $544-40
 	VMOVDQU      Y7, 480(AX)
 	RET
 
-// func compressChunksAVX2(cvs *[8][8]uint32, buf *[8192]byte, key *[8]uint32, counter uint64, flags uint32)
+// func compressChunksAVX2(cvs *[8][8]uint32, buf *[8192]byte, key *[8]uint32, Counter uint64, Flags uint32)
 // Requires: AVX, AVX2
 TEXT ·compressChunksAVX2(SB), NOSPLIT, $672-40
 	MOVQ cvs+0(FP), AX
@@ -3142,9 +3142,9 @@ TEXT ·compressChunksAVX2(SB), NOSPLIT, $672-40
 	VPBROADCASTD 24(DX), Y6
 	VPBROADCASTD 28(DX), Y7
 
-	// Initialize counter
-	VPBROADCASTQ counter+24(FP), Y12
-	VPBROADCASTQ counter+24(FP), Y13
+	// Initialize Counter
+	VPBROADCASTQ Counter+24(FP), Y12
+	VPBROADCASTQ Counter+24(FP), Y13
 	VPADDQ       seq64<>+0(SB), Y12, Y12
 	VPADDQ       seq64<>+32(SB), Y13, Y13
 	VPUNPCKLDQ   Y13, Y12, Y14
@@ -3156,8 +3156,8 @@ TEXT ·compressChunksAVX2(SB), NOSPLIT, $672-40
 	VMOVDQU      Y12, 512(SP)
 	VMOVDQU      Y13, 544(SP)
 
-	// Initialize flags
-	VPBROADCASTD flags+32(FP), Y14
+	// Initialize Flags
+	VPBROADCASTD Flags+32(FP), Y14
 	VMOVDQU      Y14, 576(SP)
 	VMOVDQU      Y14, 608(SP)
 	ORL          $0x01, 576(SP)
@@ -3167,7 +3167,7 @@ TEXT ·compressChunksAVX2(SB), NOSPLIT, $672-40
 	XORQ DX, DX
 
 loop:
-	// Load transposed block
+	// Load transposed Block
 	VMOVDQU    seq<>+0(SB), Y9
 	VPSLLD     $0x0a, Y9, Y9
 	VPCMPEQD   Y8, Y8, Y8
@@ -4361,14 +4361,14 @@ loop:
 	VMOVDQU     Y15, 224(AX)
 	RET
 
-// func compressParentsAVX2(parents *[8][8]uint32, cvs *[16][8]uint32, key *[8]uint32, flags uint32)
+// func compressParentsAVX2(parents *[8][8]uint32, cvs *[16][8]uint32, key *[8]uint32, Flags uint32)
 // Requires: AVX, AVX2
 TEXT ·compressParentsAVX2(SB), NOSPLIT, $544-32
 	MOVQ parents+0(FP), AX
 	MOVQ cvs+8(FP), CX
 	MOVQ key+16(FP), DX
 
-	// Load transposed block
+	// Load transposed Block
 	VMOVDQU    seq<>+0(SB), Y9
 	VPSLLD     $0x06, Y9, Y9
 	VPCMPEQD   Y8, Y8, Y8
@@ -4437,8 +4437,8 @@ TEXT ·compressParentsAVX2(SB), NOSPLIT, $544-32
 	VPXOR        Y13, Y13, Y13
 	VPBROADCASTD seq<>+4(SB), Y14
 	VPSLLD       $0x06, Y14, Y14
-	ORL          $0x04, flags+24(FP)
-	VPBROADCASTD flags+24(FP), Y15
+	ORL          $0x04, Flags+24(FP)
+	VPBROADCASTD Flags+24(FP), Y15
 	VMOVDQU      Y8, 512(SP)
 
 	// Round 1

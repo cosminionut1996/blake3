@@ -1,5 +1,5 @@
 // Package blake3 implements the BLAKE3 cryptographic hash function.
-package blake3 // import "lukechampine.com/blake3"
+package blake3 // import "cosminionut/blake3"
 
 import (
 	"encoding/binary"
@@ -30,68 +30,68 @@ var iv = [8]uint32{
 	0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
 }
 
-// A node represents a chunk or parent in the BLAKE3 Merkle tree.
-type node struct {
-	cv       [8]uint32 // chaining value from previous node
-	block    [16]uint32
-	counter  uint64
-	blockLen uint32
-	flags    uint32
+// A Node represents a chunk or parent in the BLAKE3 Merkle tree.
+type Node struct {
+	CV       [8]uint32 // chaining value from previous Node
+	Block    [16]uint32
+	Counter  uint64
+	BlockLen uint32
+	Flags    uint32
 }
 
 // parentNode returns a node that incorporates the chaining values of two child
 // nodes.
-func parentNode(left, right [8]uint32, key [8]uint32, flags uint32) node {
-	n := node{
-		cv:       key,
-		counter:  0,         // counter is reset for parents
-		blockLen: blockSize, // block is full
-		flags:    flags | flagParent,
+func parentNode(left, right [8]uint32, key [8]uint32, Flags uint32) Node {
+	n := Node{
+		CV:       key,
+		Counter:  0,         // Counter is reset for parents
+		BlockLen: blockSize, // Block is full
+		Flags:    Flags | flagParent,
 	}
-	copy(n.block[:8], left[:])
-	copy(n.block[8:], right[:])
+	copy(n.Block[:8], left[:])
+	copy(n.Block[8:], right[:])
 	return n
 }
 
 // Hasher implements hash.Hash.
 type Hasher struct {
 	key   [8]uint32
-	flags uint32
+	Flags uint32
 	size  int // output size, for Sum
 
 	// log(n) set of Merkle subtree roots, at most one per height.
 	stack   [50][8]uint32 // 2^50 * maxSIMD * chunkSize = 2^64
-	counter uint64        // number of buffers hashed; also serves as a bit vector indicating which stack elems are occupied
+	Counter uint64        // number of buffers hashed; also serves as a bit vector indicating which stack elems are occupied
 
 	buf    [maxSIMD * chunkSize]byte
 	buflen int
 }
 
 func (h *Hasher) hasSubtreeAtHeight(i int) bool {
-	return h.counter&(1<<i) != 0
+	return h.Counter&(1<<i) != 0
 }
 
-func (h *Hasher) pushSubtree(cv [8]uint32) {
+func (h *Hasher) pushSubtree(CV [8]uint32) {
 	// seek to first open stack slot, merging subtrees as we go
 	i := 0
 	for h.hasSubtreeAtHeight(i) {
-		cv = chainingValue(parentNode(h.stack[i], cv, h.key, h.flags))
+		CV = chainingValue(parentNode(h.stack[i], CV, h.key, h.Flags))
 		i++
 	}
-	h.stack[i] = cv
-	h.counter++
+	h.stack[i] = CV
+	h.Counter++
 }
 
 // rootNode computes the root of the Merkle tree. It does not modify the
 // stack.
-func (h *Hasher) rootNode() node {
-	n := compressBuffer(&h.buf, h.buflen, &h.key, h.counter*maxSIMD, h.flags)
-	for i := bits.TrailingZeros64(h.counter); i < bits.Len64(h.counter); i++ {
+func (h *Hasher) rootNode() Node {
+	n := compressBuffer(&h.buf, h.buflen, &h.key, h.Counter*maxSIMD, h.Flags)
+	for i := bits.TrailingZeros64(h.Counter); i < bits.Len64(h.Counter); i++ {
 		if h.hasSubtreeAtHeight(i) {
-			n = parentNode(h.stack[i], chainingValue(n), h.key, h.flags)
+			n = parentNode(h.stack[i], chainingValue(n), h.key, h.Flags)
 		}
 	}
-	n.flags |= flagRoot
+	n.Flags |= flagRoot
 	return n
 }
 
@@ -100,7 +100,7 @@ func (h *Hasher) Write(p []byte) (int, error) {
 	lenp := len(p)
 	for len(p) > 0 {
 		if h.buflen == len(h.buf) {
-			n := compressBuffer(&h.buf, h.buflen, &h.key, h.counter*maxSIMD, h.flags)
+			n := compressBuffer(&h.buf, h.buflen, &h.key, h.Counter*maxSIMD, h.Flags)
 			h.pushSubtree(chainingValue(n))
 			h.buflen = 0
 		}
@@ -136,7 +136,7 @@ func (h *Hasher) Sum(b []byte) (sum []byte) {
 
 // Reset implements hash.Hash.
 func (h *Hasher) Reset() {
-	h.counter = 0
+	h.Counter = 0
 	h.buflen = 0
 }
 
@@ -153,10 +153,10 @@ func (h *Hasher) XOF() *OutputReader {
 	}
 }
 
-func newHasher(key [8]uint32, flags uint32, size int) *Hasher {
+func newHasher(key [8]uint32, Flags uint32, size int) *Hasher {
 	return &Hasher{
 		key:   key,
-		flags: flags,
+		Flags: Flags,
 		size:  size,
 	}
 }
@@ -187,13 +187,13 @@ func Sum256(b []byte) (out [32]byte) {
 
 // Sum512 returns the unkeyed BLAKE3 hash of b, truncated to 512 bits.
 func Sum512(b []byte) (out [64]byte) {
-	var n node
+	var n Node
 	if len(b) <= blockSize {
 		hashBlock(&out, b)
 		return
 	} else if len(b) <= chunkSize {
 		n = compressChunk(b, &iv, 0, 0)
-		n.flags |= flagRoot
+		n.Flags |= flagRoot
 	} else {
 		h := *defaultHasher
 		h.Write(b)
@@ -233,7 +233,7 @@ func DeriveKey(subKey []byte, ctx string, srcKey []byte) {
 // An OutputReader produces an seekable stream of 2^64 - 1 pseudorandom output
 // bytes.
 type OutputReader struct {
-	n   node
+	n   Node
 	buf [maxSIMD * blockSize]byte
 	off uint64
 }
@@ -249,7 +249,7 @@ func (or *OutputReader) Read(p []byte) (int, error) {
 	lenp := len(p)
 	for len(p) > 0 {
 		if or.off%(maxSIMD*blockSize) == 0 {
-			or.n.counter = or.off / blockSize
+			or.n.Counter = or.off / blockSize
 			compressBlocks(&or.buf, or.n)
 		}
 		n := copy(p, or.buf[or.off%(maxSIMD*blockSize):])
@@ -283,7 +283,7 @@ func (or *OutputReader) Seek(offset int64, whence int) (int64, error) {
 		panic("invalid whence")
 	}
 	or.off = off
-	or.n.counter = uint64(off) / blockSize
+	or.n.Counter = uint64(off) / blockSize
 	if or.off%(maxSIMD*blockSize) != 0 {
 		compressBlocks(&or.buf, or.n)
 	}

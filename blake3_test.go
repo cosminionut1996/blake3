@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"lukechampine.com/blake3"
+	"cosminionut/blake3"
 )
 
 func toHex(data []byte) string { return hex.EncodeToString(data) }
@@ -180,7 +180,7 @@ func TestReset(t *testing.T) {
 
 	// gotta have 100% test coverage...
 	if blake3.New(0, nil).BlockSize() != 64 {
-		t.Error("incorrect block size")
+		t.Error("incorrect Block size")
 	}
 }
 

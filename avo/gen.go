@@ -56,40 +56,40 @@ func genGlobals() {
 }
 
 func genCompressBlocksAVX512() {
-	TEXT("compressBlocksAVX512", NOSPLIT, "func(out *[1024]byte, block *[16]uint32, cv *[8]uint32, counter uint64, blockLen uint32, flags uint32)")
+	TEXT("compressBlocksAVX512", NOSPLIT, "func(out *[1024]byte, Block *[16]uint32, CV *[8]uint32, Counter uint64, BlockLen uint32, Flags uint32)")
 	out := Mem{Base: Load(Param("out"), GP64())}
-	block := Mem{Base: Load(Param("block"), GP64())}
-	cv := Mem{Base: Load(Param("cv"), GP64())}
-	counter, _ := Param("counter").Resolve()
-	blockLen, _ := Param("blockLen").Resolve()
-	flags, _ := Param("flags").Resolve()
+	Block := Mem{Base: Load(Param("Block"), GP64())}
+	CV := Mem{Base: Load(Param("CV"), GP64())}
+	Counter, _ := Param("Counter").Resolve()
+	BlockLen, _ := Param("BlockLen").Resolve()
+	Flags, _ := Param("Flags").Resolve()
 
-	Comment("Initialize block vectors")
+	Comment("Initialize Block vectors")
 	var vs, mv [16]VecVirtual
 	for i := range vs {
 		vs[i], mv[i] = ZMM(), ZMM()
-		VPBROADCASTD_Z(block.Offset(i*4), mv[i])
+		VPBROADCASTD_Z(Block.Offset(i*4), mv[i])
 	}
 
 	Comment("Initialize state vectors")
 	for i, v := range vs {
 		switch i {
-		case 0, 1, 2, 3, 4, 5, 6, 7: // cv
-			VPBROADCASTD_Z(cv.Offset(i*4), v)
+		case 0, 1, 2, 3, 4, 5, 6, 7: // CV
+			VPBROADCASTD_Z(CV.Offset(i*4), v)
 		case 8, 9, 10, 11: // iv
 			VPBROADCASTD_Z(globals.iv.Offset((i-8)*4), v)
-		case 12: // counter
-			VPBROADCASTD_Z(counter.Addr, vs[12])
+		case 12: // Counter
+			VPBROADCASTD_Z(Counter.Addr, vs[12])
 			VPADDD_Z(globals.seq, vs[12], vs[12])
-			// set a 1 bit in K1 for each overflowed counter in vs[12]
+			// set a 1 bit in K1 for each overflowed Counter in vs[12]
 			VPCMPUD(Imm(1), globals.seq, vs[12], K1)
-			// add 1 to each counter in vs[13] for each 1 bit in K1
-			VPBROADCASTD_Z(counter.Addr.Offset(1*4), vs[13])
+			// add 1 to each Counter in vs[13] for each 1 bit in K1
+			VPBROADCASTD_Z(Counter.Addr.Offset(1*4), vs[13])
 			VPADDD_ZBK(globals.seq.Offset(4), vs[13], K1, vs[13])
-		case 14: // blockLen
-			VPBROADCASTD_Z(blockLen.Addr, v)
-		case 15: // flags
-			VPBROADCASTD_Z(flags.Addr, v)
+		case 14: // BlockLen
+			VPBROADCASTD_Z(BlockLen.Addr, v)
+		case 15: // Flags
+			VPBROADCASTD_Z(Flags.Addr, v)
 		}
 	}
 
@@ -100,7 +100,7 @@ func genCompressBlocksAVX512() {
 		VPXORD_Z(v, vs[i+8], v)
 	}
 	for i, v := range vs[8:] {
-		VPXORD_ZB(cv.Offset(i*4), v, v)
+		VPXORD_ZB(CV.Offset(i*4), v, v)
 	}
 	stride := ZMM()
 	VMOVDQU32_Z(globals.seq, stride)
@@ -114,32 +114,32 @@ func genCompressBlocksAVX512() {
 }
 
 func genCompressChunksAVX512() {
-	TEXT("compressChunksAVX512", NOSPLIT, "func(cvs *[16][8]uint32, buf *[16384]byte, key *[8]uint32, counter uint64, flags uint32)")
+	TEXT("compressChunksAVX512", NOSPLIT, "func(cvs *[16][8]uint32, buf *[16384]byte, key *[8]uint32, Counter uint64, Flags uint32)")
 	cvs := Mem{Base: Load(Param("cvs"), GP64())}
 	buf := Mem{Base: Load(Param("buf"), GP64())}
 	key := Mem{Base: Load(Param("key"), GP64())}
-	counter, _ := Param("counter").Resolve()
-	flags, _ := Param("flags").Resolve()
+	Counter, _ := Param("Counter").Resolve()
+	Flags, _ := Param("Flags").Resolve()
 
 	var vs, mv [16]VecVirtual
 	for i := range vs {
 		vs[i], mv[i] = ZMM(), ZMM()
 	}
 
-	Comment("Initialize counter")
+	Comment("Initialize Counter")
 	counterLo := AllocLocal(64)
 	counterHi := AllocLocal(64)
-	VPBROADCASTD_Z(counter.Addr, vs[0])
+	VPBROADCASTD_Z(Counter.Addr, vs[0])
 	VPADDD_Z(globals.seq, vs[0], vs[0])
 	VPCMPUD(Imm(1), globals.seq, vs[0], K1)
-	VPBROADCASTD_Z(counter.Addr.Offset(4), vs[1])
+	VPBROADCASTD_Z(Counter.Addr.Offset(4), vs[1])
 	VPADDD_ZBK(globals.seq.Offset(4), vs[1], K1, vs[1])
 	VMOVDQU32_Z(vs[0], counterLo)
 	VMOVDQU32_Z(vs[1], counterHi)
 
-	Comment("Initialize flags")
+	Comment("Initialize Flags")
 	chunkFlags := AllocLocal(16 * 4)
-	VPBROADCASTD_Z(flags.Addr, vs[0])
+	VPBROADCASTD_Z(Flags.Addr, vs[0])
 	VMOVDQU32_Z(vs[0], chunkFlags)
 	ORL(Imm(1), chunkFlags.Offset(0*4))
 	ORL(Imm(2), chunkFlags.Offset(15*4))
@@ -154,7 +154,7 @@ func genCompressChunksAVX512() {
 	XORQ(loop, loop)
 	Label("loop")
 
-	Comment("Load transposed block")
+	Comment("Load transposed Block")
 	VMOVDQU32_Z(globals.seq, vs[8])
 	VPSLLD_Z(Imm(10), vs[8], vs[8]) // stride of 1024
 	for i, m := range mv {
@@ -236,13 +236,13 @@ func performRoundsAVX512(vs, mv [16]VecVirtual) {
 }
 
 func genCompressBlocksAVX2() {
-	TEXT("compressBlocksAVX2", NOSPLIT, "func(out *[512]byte, block *[16]uint32, cv *[8]uint32, counter uint64, blockLen uint32, flags uint32)")
+	TEXT("compressBlocksAVX2", NOSPLIT, "func(out *[512]byte, Block *[16]uint32, CV *[8]uint32, Counter uint64, BlockLen uint32, Flags uint32)")
 	out := Mem{Base: Load(Param("out"), GP64())}
-	block := Mem{Base: Load(Param("block"), GP64())}
-	cv := Mem{Base: Load(Param("cv"), GP64())}
-	counter, _ := Param("counter").Resolve()
-	blockLen, _ := Param("blockLen").Resolve()
-	flags, _ := Param("flags").Resolve()
+	Block := Mem{Base: Load(Param("Block"), GP64())}
+	CV := Mem{Base: Load(Param("CV"), GP64())}
+	Counter, _ := Param("Counter").Resolve()
+	BlockLen, _ := Param("BlockLen").Resolve()
+	Flags, _ := Param("Flags").Resolve()
 
 	var vs [16]VecVirtual
 	var mv [16]Mem
@@ -251,25 +251,25 @@ func genCompressBlocksAVX2() {
 		mv[i] = AllocLocal(32)
 	}
 
-	Comment("Load block")
+	Comment("Load Block")
 	for i := 0; i < 16; i++ {
-		VPBROADCASTD(block.Offset(i*4), vs[0])
+		VPBROADCASTD(Block.Offset(i*4), vs[0])
 		VMOVDQU(vs[0], mv[i])
 	}
 
 	Comment("Initialize state vectors")
 	for i, v := range vs {
 		switch i {
-		case 0, 1, 2, 3, 4, 5, 6, 7: // cv
-			VPBROADCASTD(cv.Offset(i*4), v)
+		case 0, 1, 2, 3, 4, 5, 6, 7: // CV
+			VPBROADCASTD(CV.Offset(i*4), v)
 		case 8, 9, 10, 11: // iv
 			VPBROADCASTD(globals.iv.Offset((i-8)*4), v)
-		case 12: // counter
-			loadCounter(counter.Addr, vs[12:14], vs[14:16])
-		case 14: // blockLen
-			VPBROADCASTD(blockLen.Addr, v)
-		case 15: // flags
-			VPBROADCASTD(flags.Addr, v)
+		case 12: // Counter
+			loadCounter(Counter.Addr, vs[12:14], vs[14:16])
+		case 14: // BlockLen
+			VPBROADCASTD(BlockLen.Addr, v)
+		case 15: // Flags
+			VPBROADCASTD(Flags.Addr, v)
 		}
 	}
 
@@ -290,7 +290,7 @@ func genCompressBlocksAVX2() {
 		VMOVDQU(mv[i], vs[i])
 	}
 	for i, v := range vs[8:] {
-		VPBROADCASTD(cv.Offset(i*4), vs[0])
+		VPBROADCASTD(CV.Offset(i*4), vs[0])
 		VPXOR(vs[0], v, v)
 	}
 	transpose(vs[8:], vs[:8])
@@ -302,12 +302,12 @@ func genCompressBlocksAVX2() {
 }
 
 func genCompressChunksAVX2() {
-	TEXT("compressChunksAVX2", NOSPLIT, "func(cvs *[8][8]uint32, buf *[8192]byte, key *[8]uint32, counter uint64, flags uint32)")
+	TEXT("compressChunksAVX2", NOSPLIT, "func(cvs *[8][8]uint32, buf *[8192]byte, key *[8]uint32, Counter uint64, Flags uint32)")
 	cvs := Mem{Base: Load(Param("cvs"), GP64())}
 	buf := Mem{Base: Load(Param("buf"), GP64())}
 	key := Mem{Base: Load(Param("key"), GP64())}
-	counter, _ := Param("counter").Resolve()
-	flags, _ := Param("flags").Resolve()
+	Counter, _ := Param("Counter").Resolve()
+	Flags, _ := Param("Flags").Resolve()
 
 	var vs [16]VecVirtual
 	var mv [16]Mem
@@ -321,16 +321,16 @@ func genCompressChunksAVX2() {
 		VPBROADCASTD(key.Offset(i*4), vs[i])
 	}
 
-	Comment("Initialize counter")
+	Comment("Initialize Counter")
 	counterLo := AllocLocal(32)
 	counterHi := AllocLocal(32)
-	loadCounter(counter.Addr, vs[12:14], vs[14:16])
+	loadCounter(Counter.Addr, vs[12:14], vs[14:16])
 	VMOVDQU(vs[12], counterLo)
 	VMOVDQU(vs[13], counterHi)
 
-	Comment("Initialize flags")
+	Comment("Initialize Flags")
 	chunkFlags := AllocLocal(16 * 4)
-	VPBROADCASTD(flags.Addr, vs[14])
+	VPBROADCASTD(Flags.Addr, vs[14])
 	VMOVDQU(vs[14], chunkFlags.Offset(0*32))
 	VMOVDQU(vs[14], chunkFlags.Offset(1*32))
 	ORL(Imm(1), chunkFlags.Offset(0*4))
@@ -341,7 +341,7 @@ func genCompressChunksAVX2() {
 	XORQ(loop, loop)
 	Label("loop")
 
-	Comment("Load transposed block")
+	Comment("Load transposed Block")
 	VMOVDQU(globals.seq, vs[9])
 	VPSLLD(Imm(10), vs[9], vs[9]) // stride of 1024
 	for i := 0; i < 16; i++ {
@@ -383,11 +383,11 @@ func genCompressChunksAVX2() {
 }
 
 func genCompressParentsAVX2() {
-	TEXT("compressParentsAVX2", NOSPLIT, "func(parents *[8][8]uint32, cvs *[16][8]uint32, key *[8]uint32, flags uint32)")
+	TEXT("compressParentsAVX2", NOSPLIT, "func(parents *[8][8]uint32, cvs *[16][8]uint32, key *[8]uint32, Flags uint32)")
 	parents := Mem{Base: Load(Param("parents"), GP64())}
 	cvs := Mem{Base: Load(Param("cvs"), GP64())}
 	key := Mem{Base: Load(Param("key"), GP64())}
-	flags, _ := Param("flags").Resolve()
+	Flags, _ := Param("Flags").Resolve()
 
 	var vs [16]VecVirtual
 	var mv [16]Mem
@@ -396,7 +396,7 @@ func genCompressParentsAVX2() {
 		mv[i] = AllocLocal(32)
 	}
 
-	Comment("Load transposed block")
+	Comment("Load transposed Block")
 	VMOVDQU(globals.seq, vs[9])
 	VPSLLD(Imm(6), vs[9], vs[9]) // stride of 64
 	for i := 0; i < 16; i++ {
@@ -408,18 +408,18 @@ func genCompressParentsAVX2() {
 	Comment("Initialize state vectors")
 	for i, v := range vs {
 		switch i {
-		case 0, 1, 2, 3, 4, 5, 6, 7: // cv
+		case 0, 1, 2, 3, 4, 5, 6, 7: // CV
 			VPBROADCASTD(key.Offset(i*4), v)
 		case 8, 9, 10, 11: // iv
 			VPBROADCASTD(globals.iv.Offset((i-8)*4), v)
-		case 12, 13: // counter
+		case 12, 13: // Counter
 			VPXOR(v, v, v)
-		case 14: // blockLen
+		case 14: // BlockLen
 			VPBROADCASTD(globals.seq.Offset(1*4), v)
 			VPSLLD(Imm(6), v, v) // 64
-		case 15: // flags
-			ORL(Imm(4), flags.Addr) // flagParent
-			VPBROADCASTD(flags.Addr, v)
+		case 15: // Flags
+			ORL(Imm(4), Flags.Addr) // flagParent
+			VPBROADCASTD(Flags.Addr, v)
 		}
 	}
 
@@ -500,11 +500,11 @@ func performRoundsAVX2(sv [16]VecVirtual, mv [16]Mem) {
 	VMOVDQU(spillMem, sv[8]) // reload
 }
 
-func loadCounter(counter Mem, dst, scratch []VecVirtual) {
-	// fill dst[0] and dst[1] with counter + 0,1,2,3,4,5,6,7, then transpose so
+func loadCounter(Counter Mem, dst, scratch []VecVirtual) {
+	// fill dst[0] and dst[1] with Counter + 0,1,2,3,4,5,6,7, then transpose so
 	// that dst[0] contains low 32 bits and dst[1] contains high 32 bits.
-	VPBROADCASTQ(counter, dst[0])
-	VPBROADCASTQ(counter, dst[1])
+	VPBROADCASTQ(Counter, dst[0])
+	VPBROADCASTQ(Counter, dst[1])
 	VPADDQ(globals.seq64.Offset(0*4), dst[0], dst[0])
 	VPADDQ(globals.seq64.Offset(8*4), dst[1], dst[1])
 	VPUNPCKLDQ(dst[1], dst[0], scratch[0])
